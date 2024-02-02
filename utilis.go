@@ -14,10 +14,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-var (
-	copilotConfig CopilotConfig
-	client        = &http.Client{}
-)
+var copilotConfig CopilotConfig
 
 type CopilotConfig struct {
 	GithubCom struct {
@@ -50,39 +47,32 @@ func init() {
 }
 
 func getAccToken() (string, error) {
-	accToken := ""
+	cache := cache.New(15*time.Minute, 20*time.Minute)
+	if cacheToken, ok := cache.Get(copilotConfig.GithubCom.OauthToken); ok {
+		return cacheToken.(string), nil
+	}
+	req, err := http.NewRequest("GET", copilotConfig.GithubCom.DevOverride.CopilotTokenURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("token %s", copilotConfig.GithubCom.OauthToken))
 
-	cache := cache.New(15*time.Minute, 60*time.Minute)
-	cacheToken, found := cache.Get(copilotConfig.GithubCom.OauthToken)
-	if found {
-		accToken = cacheToken.(string)
-	} else {
-		req, err := http.NewRequest("GET", copilotConfig.GithubCom.DevOverride.CopilotTokenURL, nil)
-		if err != nil {
-			return accToken, err
-		}
-		req.Header.Set("Authorization", fmt.Sprintf("token %s", copilotConfig.GithubCom.OauthToken))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return accToken, err
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return accToken, fmt.Errorf("数据读取失败")
-		}
-		if resp.StatusCode == http.StatusOK {
-			accToken = gjson.GetBytes(body, "token").String()
-			if accToken == "" {
-				return accToken, fmt.Errorf("acc_token 未返回")
-			}
-			cache.Set(copilotConfig.GithubCom.OauthToken, accToken, 14*time.Minute)
-		} else {
-			log.Printf("获取 acc_token 请求失败：%d, %s ", resp.StatusCode, string(body))
-			return accToken, fmt.Errorf("获取 acc_token 请求失败： %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("数据读取失败")
+	}
+	if resp.StatusCode == http.StatusOK {
+		if token := gjson.GetBytes(body, "token").String(); token != "" {
+			cache.Set(copilotConfig.GithubCom.OauthToken, token, 14*time.Minute)
+			return token, nil
 		}
 	}
-	return accToken, nil
+
+	return "", fmt.Errorf("获取 acc_token 请求失败： %d", resp.StatusCode)
 }

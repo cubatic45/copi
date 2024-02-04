@@ -65,7 +65,7 @@ func getAccToken() (string, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("数据读取失败")
+		return "", fmt.Errorf("read body failed: %s", err)
 	}
 	if resp.StatusCode == http.StatusOK {
 		if token := gjson.GetBytes(body, "token").String(); token != "" {
@@ -74,5 +74,5 @@ func getAccToken() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("获取 acc_token 请求失败： %d", resp.StatusCode)
+	return "", fmt.Errorf("get token error: %d", resp.StatusCode)
 }

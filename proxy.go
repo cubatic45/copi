@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -28,28 +27,42 @@ type streamOutput struct {
 }
 
 type Proxy struct {
-	model  string
-	stream bool
-	*httputil.ReverseProxy
+	Director func(*http.Request)
+	model    string
+	stream   bool
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if p.stream {
-		// handle stream
-		// ...
-		p.ModifyResponse = func(r *http.Response) error {
-			if r.StatusCode != http.StatusOK {
-				return nil
-			}
-			p.scanStream(r)
-			return nil
-		}
+	req, err := http.NewRequest(r.Method, r.URL.String(), r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "http request error: %v", err)
 	}
-	p.ReverseProxy.ServeHTTP(w, r)
+	if p.Director != nil {
+		p.Director(req)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "http client error: %v", err)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		w.WriteHeader(resp.StatusCode)
+		fmt.Fprintf(w, "http status error: %d", resp.StatusCode)
+		return
+	}
+	if p.stream {
+		p.scanStream(w, resp)
+		return
+	}
+	for k, v := range resp.Header {
+		w.Header().Set(k, v[0])
+	}
+	io.Copy(w, resp.Body)
 }
 
-func (p *Proxy) scanStream(r *http.Response) {
-	w := &bytes.Buffer{}
+func (p *Proxy) scanStream(w http.ResponseWriter, r *http.Response) {
 	scanner := bufio.NewScanner(r.Body)
 	for scanner.Scan() {
 		v := scanner.Bytes()
@@ -58,7 +71,6 @@ func (p *Proxy) scanStream(r *http.Response) {
 		}
 		if bytes.Contains(v, []byte("data: [DONE]")) {
 			w.Write([]byte("data: [DONE]\n"))
-			r.Body = io.NopCloser(w)
 			return
 		}
 		if len(v) > 5 && bytes.Contains(v, []byte("data")) {
@@ -90,7 +102,6 @@ func (p *Proxy) scanStream(r *http.Response) {
 	}
 }
 
-// 所有请求转发到https://api.githubcopilot.com
 func handleProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -105,26 +116,24 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	p.stream = bodyJson.Get("stream").Bool()
 	p.model = bodyJson.Get("model").String()
 
-	proxy := httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			req.Host = "api.githubcopilot.com"
-			req.URL.Scheme = "https"
-			req.URL.Host = "api.githubcopilot.com"
-			// remove /v1/ from req.URL.Path
-			req.URL.Path = strings.ReplaceAll(req.URL.Path, "/v1/", "/")
+	p.Director = func(req *http.Request) {
+		req.Host = "api.githubcopilot.com"
+		req.URL.Scheme = "https"
+		req.URL.Host = "api.githubcopilot.com"
+		// remove /v1/ from req.URL.Path
+		req.URL.Path = strings.ReplaceAll(req.URL.Path, "/v1/", "/")
 
-			accToken, err := getAccToken()
-			if accToken == "" {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "get acc token error: %v", err)
-				return
-			}
-			accHeaders := getAccHeaders(accToken)
-			for k, v := range accHeaders {
-				req.Header.Set(k, v)
-			}
-		},
+		accToken, err := getAccToken()
+		if accToken == "" {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "get acc token error: %v", err)
+			return
+		}
+		accHeaders := getAccHeaders(accToken)
+		for k, v := range accHeaders {
+			req.Header.Set(k, v)
+		}
 	}
-	p.ReverseProxy = &proxy
+
 	p.ServeHTTP(w, r)
 }

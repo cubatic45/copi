@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/tidwall/gjson"
 )
@@ -63,6 +64,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) scanStream(w http.ResponseWriter, r *http.Response) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
+		return
+	}
+
 	scanner := bufio.NewScanner(r.Body)
 	for scanner.Scan() {
 		v := scanner.Bytes()
@@ -98,6 +105,8 @@ func (p *Proxy) scanStream(w http.ResponseWriter, r *http.Response) {
 			w.Write([]byte("data: "))
 			w.Write(jsonOutput)
 			w.Write([]byte("\n\n"))
+			flusher.Flush()
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 }

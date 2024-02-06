@@ -132,7 +132,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		// remove /v1/ from req.URL.Path
 		req.URL.Path = strings.ReplaceAll(req.URL.Path, "/v1/", "/")
 
-		accToken, err := getAccToken()
+		accToken, err := getCopilot().token()
 		if accToken == "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "get acc token error: %v", err)

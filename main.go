@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 )
 
@@ -11,9 +12,11 @@ var (
 )
 
 func main() {
-	copilotToken = *flag.String("token", "", "token to get copilot token")
-	copilotTokenURL = *flag.String("tokenurl", "", "url to get copilot token")
+	flag.StringVar(&copilotToken, "token", "", "token to get copilot token")
+	flag.StringVar(&copilotTokenURL, "token_url", "", "url to get copilot token")
 	flag.Parse()
+	fmt.Printf("copilotToken: %s\n", copilotToken)
+	fmt.Printf("copilotTokenURL: %s\n", copilotTokenURL)
 	Init()
 	http.HandleFunc("/", handleProxy)
 	http.ListenAndServe(":8081", nil)

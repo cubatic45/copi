@@ -49,8 +49,6 @@ func Init() {
 		log.Fatal(err)
 	}
 	hostsJson := path.Join(dir, ".config", "github-copilot", "hosts.json")
-	log.Println(hostsJson)
-	// read hosts.json
 	_, err = os.Stat(hostsJson)
 
 	if !os.IsNotExist(err) {
@@ -60,6 +58,11 @@ func Init() {
 		}
 		if err := json.Unmarshal(bts, copilotCFG); err != nil {
 			log.Fatal(err)
+		}
+		log.Printf("read config file path: %s", hostsJson)
+	} else {
+		if copilotToken == "" {
+			log.Fatal("no token and no hosts.json found, please set token or create hosts.json file in ~/.config/github-copilot/hosts.json")
 		}
 	}
 	if copilotToken != "" {

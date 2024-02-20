@@ -15,5 +15,5 @@ COPY --from=builder /app/copi .
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 
 EXPOSE 8081
-CMD ["./copi"]
+ENTRYPOINT ["./copi", "-token", "", "-token_url", ""]
 

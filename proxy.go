@@ -141,7 +141,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			accToken, _ = getCopilot().refresh()
 		}
-		if accToken == "" {
+		if accToken == nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "get acc token error: %v", err)
 			return

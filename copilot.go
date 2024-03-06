@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/patrickmn/go-cache"
 	"github.com/tidwall/gjson"
@@ -33,6 +36,12 @@ type copilot struct {
 			CopilotTokenURL string `json:"copilot_token_url"`
 		} `json:"dev_override"`
 	} `json:"github.com"`
+}
+
+type vscodeCopilot struct {
+	token     string
+	machineid string
+	sessionid string
 }
 
 func Init() {
@@ -76,18 +85,18 @@ func Init() {
 // Copiloter is the interface that wraps the token method.
 // token return the access token for github copilot
 type copiloter interface {
-	token() (string, error)
-	refresh() (string, error)
+	token() (*vscodeCopilot, error)
+	refresh() (*vscodeCopilot, error)
 }
 
-func (c *copilot) refresh() (string, error) {
+func (c *copilot) refresh() (*vscodeCopilot, error) {
 	caches.Delete(c.GithubCom.OauthToken)
 	return c.token()
 }
 
-func (c *copilot) token() (string, error) {
+func (c *copilot) token() (*vscodeCopilot, error) {
 	if cacheToken, ok := caches.Get(c.GithubCom.OauthToken); ok {
-		return cacheToken.(string), nil
+		return cacheToken.(*vscodeCopilot), nil
 	}
 	tokenURL := c.GithubCom.DevOverride.CopilotTokenURL
 	if tokenURL == "" {
@@ -96,27 +105,35 @@ func (c *copilot) token() (string, error) {
 
 	req, err := http.NewRequest(http.MethodGet, tokenURL, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("token %s", c.GithubCom.OauthToken))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("get token error: %d", resp.StatusCode)
+		return nil, fmt.Errorf("get token error: %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if token := gjson.GetBytes(body, "token").String(); token != "" {
-		caches.Set(c.GithubCom.OauthToken, token, 14*time.Minute)
-		return token, nil
+		sessionId := fmt.Sprintf("%s%d", uuid.New().String(), time.Now().UnixNano()/int64(time.Millisecond))
+		machineID := sha256.Sum256([]byte(uuid.New().String()))
+		machineIDStr := hex.EncodeToString(machineID[:])
+		vscodeCopilot := &vscodeCopilot{
+			token:     token,
+			machineid: machineIDStr,
+			sessionid: sessionId,
+		}
+		caches.Set(c.GithubCom.OauthToken, vscodeCopilot, 14*time.Minute)
+		return vscodeCopilot, nil
 	}
 
-	return "", fmt.Errorf("get token error")
+	return nil, fmt.Errorf("get token error")
 }

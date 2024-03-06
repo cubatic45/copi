@@ -18,6 +18,8 @@ func main() {
 	fmt.Printf("copilotToken: %s\n", copilotToken)
 	fmt.Printf("copilotTokenURL: %s\n", copilotTokenURL)
 	Init()
-	http.HandleFunc("/", handleProxy)
-	http.ListenAndServe(":8081", nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/models", handleModel)
+	mux.HandleFunc("POST /v1/chat/completions", handleProxy)
+	http.ListenAndServe(":8081", mux)
 }

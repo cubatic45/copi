@@ -1,6 +1,6 @@
 module github.com/cubatic45/copi
 
-go 1.21.6
+go 1.22.0
 
 require (
 	github.com/mitchellh/go-homedir v1.1.0

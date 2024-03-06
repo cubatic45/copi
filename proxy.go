@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -34,10 +35,11 @@ type Proxy struct {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	write := io.MultiWriter(w, os.Stdout)
 	req, err := http.NewRequest(r.Method, r.URL.String(), r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "http request error: %v", err)
+		fmt.Fprintf(write, "http request error: %v\n", err)
 	}
 	if p.Director != nil {
 		p.Director(req)
@@ -45,12 +47,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "http client error: %v", err)
+		fmt.Fprintf(write, "http client error: %v\n", err)
 		return
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		w.WriteHeader(resp.StatusCode)
-		fmt.Fprintf(w, "http status error: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Fprintf(write, "http status error: %d\nbody: %s\n", resp.StatusCode, string(body))
+		go getCopilot().refresh()
 		return
 	}
 	if p.stream {
@@ -133,6 +138,9 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		req.URL.Path = strings.ReplaceAll(req.URL.Path, "/v1/", "/")
 
 		accToken, err := getCopilot().token()
+		if err != nil {
+			accToken, _ = getCopilot().refresh()
+		}
 		if accToken == "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "get acc token error: %v", err)

@@ -77,6 +77,12 @@ func Init() {
 // token return the access token for github copilot
 type copiloter interface {
 	token() (string, error)
+	refresh() (string, error)
+}
+
+func (c *copilot) refresh() (string, error) {
+	caches.Delete(c.GithubCom.OauthToken)
+	return c.token()
 }
 
 func (c *copilot) token() (string, error) {

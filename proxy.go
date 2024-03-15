@@ -23,6 +23,7 @@ type streamOutput struct {
 	Choices           []struct {
 		Index int `json:"index"`
 		Delta struct {
+			Role    string `json:"role"`
 			Content string `json:"content"`
 		} `json:"delta"`
 	} `json:"choices"`
@@ -94,7 +95,8 @@ func (p *Proxy) scanStream(w http.ResponseWriter, r *http.Response) {
 			if len(output.Choices) == 0 {
 				continue
 			}
-			for _, c := range output.Choices {
+			for i, c := range output.Choices {
+				output.Choices[i].Delta.Role = "assistant"
 				if c.Delta.Content == "" {
 					continue
 				}

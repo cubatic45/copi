@@ -21,8 +21,9 @@ type streamOutput struct {
 	Model             string `json:"model"`
 	SystemFingerprint any    `json:"system_fingerprint,omitempty"`
 	Choices           []struct {
-		Index int `json:"index"`
-		Delta struct {
+		Index        int    `json:"index"`
+		FinishReason string `json:"finish_reason"`
+		Delta        struct {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		} `json:"delta"`
